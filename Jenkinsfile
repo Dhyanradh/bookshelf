@@ -2,49 +2,48 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "eu-north-1"
-        ECR_REPO = "744918081105.dkr.ecr.eu-north-1.amazonaws.com/bookshelf-backend"
-        FRONTEND_BUCKET = "bookshlve23"
-        EC2_HOST = "ec2-user@13.60.203.183"
+        BACKEND_DIR = "backend"
+        FRONTEND_DIR = "frontend"
+        EC2_HOST = "YOUR_EC2_PUBLIC_IP"
+        SSH_KEY_ID = "your-ssh-key-id" // ID from Jenkins credentials
+        S3_BUCKET = "your-s3-bucket-name"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Clone Repo') {
             steps {
-                git branch: 'main', url: 'https://github.com/dhyanradh/bookshelf.git'
+                git branch: 'main', url: 'https://github.com/your-username/bookshelf.git'
             }
         }
 
-        stage('Build & Push Backend Image') {
+        stage('Backend - Build & Deploy to EC2') {
             steps {
-                sh """
-                aws ecr get-login-password --region $AWS_REGION \
-                | docker login --username AWS --password-stdin $ECR_REPO
+                sshagent(credentials: ["${SSH_KEY_ID}"]) {
+                    sh """
+                    ssh -o StrictHostKeyChecking=no ec2-user@${EC2_HOST} '
+                        cd /home/ec2-user &&
+                        rm -rf backend &&
+                        mkdir backend &&
+                        exit
+                    '
+                    scp -o StrictHostKeyChecking=no -r ${BACKEND_DIR}/* ec2-user@${EC2_HOST}:/home/ec2-user/backend
 
-                docker build -t bookshelf-backend ./backend
-                docker tag bookshelf-backend:latest $ECR_REPO:latest
-                docker push $ECR_REPO:latest
-                """
+                    ssh -o StrictHostKeyChecking=no ec2-user@${EC2_HOST} '
+                        cd backend &&
+                        docker build -t bookshelf-backend . &&
+                        docker stop bookshelf || true &&
+                        docker rm bookshelf || true &&
+                        docker run -d -p 5000:5000 --name bookshelf bookshelf-backend
+                    '
+                    """
+                }
             }
         }
 
-        stage('Upload Frontend to S3') {
+        stage('Frontend - Upload to S3') {
             steps {
                 sh """
-                aws s3 sync ./frontend s3://$FRONTEND_BUCKET --delete
-                """
-            }
-        }
-
-        stage('Deploy to EC2') {
-            steps {
-                sh """
-                ssh -o StrictHostKeyChecking=no $EC2_HOST '
-                    docker pull $ECR_REPO:latest &&
-                    docker stop bookshelf || true &&
-                    docker rm bookshelf || true &&
-                    docker run -d -p 5000:5000 --name bookshelf $ECR_REPO:latest
-                '
+                aws s3 sync ${FRONTEND_DIR}/ s3://${S3_BUCKET} --delete
                 """
             }
         }
