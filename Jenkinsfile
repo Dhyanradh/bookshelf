@@ -5,33 +5,22 @@ pipeline {
         stage('Clone Repo') {
             steps {
                 git branch: 'main',
-                    url: 'git@github.com:dhyanradh/bookshelf.git',
-                    credentialsId: 'ec2-ssh-key'
+                    url: 'https://github.com/dhyanradh/bookshelf.git',
+                    credentialsId: 'toktok'
             }
         }
 
         stage('Backend - Build & Deploy to EC2') {
             steps {
-                sh '''
-                echo "Building Docker image for backend..."
-                docker build -t bookshelf-backend ./backend
-
-                echo "Stopping old container (if running)..."
-                docker stop bookshelf-backend || true
-                docker rm bookshelf-backend || true
-
-                echo "Starting new backend container..."
-                docker run -d --name bookshelf-backend -p 5000:5000 bookshelf-backend
-                '''
+                echo 'Building and deploying backend...'
+                // your backend build & deploy steps
             }
         }
 
         stage('Frontend - Upload to S3') {
             steps {
-                sh '''
-                echo "Uploading frontend files to S3..."
-                aws s3 sync ./frontend s3://your-s3-bucket-name --delete
-                '''
+                echo 'Uploading frontend to S3...'
+                // your frontend upload steps
             }
         }
     }
